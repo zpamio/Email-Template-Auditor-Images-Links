@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Template Auditor: Images & Links</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 1450px; margin: auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 150px; margin-bottom: 15px; font-family: monospace; border: 1px solid #ccc; padding: 10px; border-radius: 4px; }
+        
+        .section-header { background: #343a40; color: white; padding: 10px 15px; border-radius: 4px; margin-top: 30px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+        th, td { border: 1px solid #eee; padding: 12px; text-align: left; vertical-align: middle; font-size: 13px; }
+        th { background: #f8f9fa; font-size: 11px; text-transform: uppercase; color: #666; }
+        
+        .preview-img { width: 60px; height: auto; border-radius: 4px; border: 1px solid #ddd; }
+        .waste-badge { background: #dc3545; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+        .kb-val { font-weight: bold; color: #28a745; }
+        .link-text { color: #007bff; text-decoration: none; font-weight: 500; }
+        
+        button { padding: 12px 25px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+
+        #sandbox { position: absolute; left: -9999px; top: 0; width: 1200px; height: 1000px; visibility: hidden; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Template Auditor: Images & Links</h1>
+    <textarea id="htmlInput" placeholder="Paste your full HTML code here..."></textarea>
+    <button onclick="injectAndAudit()">Analyze</button>
+
+    <div class="section-header">Image Optimization Analysis</div>
+    <table id="imageTable">
+        <thead>
+            <tr>
+                <th style="width: 80px;">Preview</th>
+                <th>Image Source</th>
+                <th style="width: 140px;">Intrinsic (File)</th>
+                <th style="width: 140px;">Rendered (Live)</th>
+                <th style="width: 160px;">Efficiency/Saving</th>
+            </tr>
+        </thead>
+        <tbody id="imageBody"></tbody>
+    </table>
+
+    <div class="section-header">HREF Link Audit</div>
+    <table id="linkTable">
+        <thead>
+            <tr>
+                <th style="width: 250px;">Link Text / Anchor</th>
+                <th>Destination URL (HREF)</th>
+                <th style="width: 100px;">Target</th>
+            </tr>
+        </thead>
+        <tbody id="linkBody"></tbody>
+    </table>
+</div>
+
+<iframe id="sandbox"></iframe>
+
+<script>
+    async function injectAndAudit() {
+        const rawHTML = document.getElementById('htmlInput').value;
+        const sandbox = document.getElementById('sandbox');
+        const imageBody = document.getElementById('imageBody');
+        const linkBody = document.getElementById('linkBody');
+        
+        imageBody.innerHTML = '';
+        linkBody.innerHTML = '';
+
+        const frameDoc = sandbox.contentDocument || sandbox.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(rawHTML);
+        frameDoc.close();
+
+        setTimeout(() => {
+            // --- Audit Images ---
+            const injectedImages = Array.from(frameDoc.querySelectorAll('img'));
+            injectedImages.forEach((img, index) => {
+                const src = img.src;
+                if (!src || src.startsWith('data:image')) return;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><img src="${src}" class="preview-img"></td>
+                    <td style="word-break:break-all; font-size:11px; color:#666;">${src}</td>
+                    <td id="int-${index}">...</td>
+                    <td id="rend-${index}">...</td>
+                    <td id="save-${index}">...</td>
+                `;
+                imageBody.appendChild(row);
+                processImageMetrics(img, src, index);
+            });
+
+            // --- Audit Links (HREFs) ---
+            const injectedLinks = Array.from(frameDoc.querySelectorAll('a'));
+            injectedLinks.forEach(link => {
+                const href = link.getAttribute('href') || "#";
+                const target = link.getAttribute('target') || "_self";
+                let anchorContent = link.innerText.trim() || link.innerHTML.trim();
+                
+                // If the link contains an image instead of text
+                if (link.querySelector('img')) {
+                    anchorContent = `[Image Link]`;
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${anchorContent || "(Empty Link)"}</strong></td>
+                    <td style="word-break:break-all;"><a href="${href}" target="_blank" class="link-text">${href}</a></td>
+                    <td><code>${target}</code></td>
+                `;
+                linkBody.appendChild(row);
+            });
+        }, 1000);
+    }
+
+    function processImageMetrics(injectedImg, url, index) {
+        const rW = injectedImg.clientWidth;
+        const rH = injectedImg.clientHeight;
+        const rArea = rW * rH;
+
+        const temp = new Image();
+        temp.onload = function() {
+            const iW = this.width;
+            const iH = this.height;
+            const iArea = iW * iH;
+            const waste = Math.round((1 - (rArea / iArea)) * 100);
+
+            document.getElementById(`int-${index}`).innerHTML = `<b>${iW}x${iH}</b>`;
+            document.getElementById(`rend-${index}`).innerHTML = `<b>${rW}x${rH}</b><br><span class="waste-badge">${Math.max(0, waste)}% Waste</span>`;
+
+            fetch(url, { method: 'HEAD' }).then(res => {
+                const bytes = parseInt(res.headers.get('content-length')) || 0;
+                const kb = bytes / 1024;
+                const saved = kb * (1 - (rArea / iArea));
+                document.getElementById(`save-${index}`).innerHTML = `
+                    <small>Size:</small> ${kb.toFixed(1)} KB<br>
+                    <small>Save:</small> <span class="kb-val">~${Math.max(0, saved).toFixed(1)} KB</span>
+                `;
+            }).catch(() => {
+                document.getElementById(`save-${index}`).innerText = "CORS restricted";
+            });
+        };
+        temp.src = url;
+    }
+</script>
+
+</body>
+</html>
