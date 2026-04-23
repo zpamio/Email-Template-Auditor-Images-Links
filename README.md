@@ -26,10 +26,9 @@
 
 ```bash
 # No install needed — just open the file
-open check-image-link.html
 ```
 
-1. Open `check-image-link.html` in any modern browser
+1. Open HTML(https://zpamio.github.io/Email-Template-Auditor-Images-Links/) in any modern browser
 2. Paste your full HTML email template into the text area
 3. Click **Analyze**
 4. Review the results in the two audit tables below
